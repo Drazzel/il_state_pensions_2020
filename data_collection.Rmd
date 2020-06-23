@@ -1,0 +1,192 @@
+---
+title: "Data Collection"
+output: html_notebook
+---
+
+```{r}
+library(tidyverse)
+library(tabulizer)
+library(openxlsx)
+library(foreach)
+```
+
+The 5 retirement systems that contribute to the Illinois Retirement System are as follows:
+
+GARS - Generally Assembly Retirement System
+JRS - Judges' Retirement System
+SERS - State Employees' Retirement System
+SURS - State University Retirement System
+TRS - Teachers' Retirement System
+
+Actuarial valuation reports are published annually. Current actuarial valuation reports, as of June 15, 2020, cover the period ending in June 2019. These reports were all published prior to the COVID-19 pandemic and any resultant asset losses.
+
+For each system, the following data is necessary in order to calculate the future projections and perform the variety of intended analyses.
+
+* Assets for the pension system at the beginning of the year listed (assets_boy)
+• Assets for the pension system at the end of the year listed (assets_eoy)
+* Unfunded liability (uual)
+* Actuarially accrued liability at the end of the year listed (aal)
+* Funded ratio (ratio)
+* Total state payment towards the pension system in the listed year (state_contribution) 
+* Employee normal cost (empe_nc)
+* Employer normal cost (empr_nc)
+* Total normal cost - the sume of employee and employer normal costs in a listed year (tot_nc)
+* Disbursements from the pension system for benefits in the calendar year (disbursements)
+* Administrative expenses (admin_exp)
+* Total administrative expenses and disbursements (tot_exp)
+* Assumed rate of return for the pension system (ror)
+
+TRS data must be collected manually.
+
+```{r GARS collection}
+link <- "./actuarial_val_reports/gars_2019.pdf"
+table <- extract_tables(link,
+               pages = 33,
+               method = "stream")
+exp <- as.data.frame(table[[1]])
+write.xlsx(exp,"./raw_data/gars_june_2019_1.xlsx")
+
+table <- extract_tables(link,
+               pages = 34,
+               method = "stream")
+exp <- as.data.frame(table[[1]])
+write.xlsx(exp,"./raw_data/gars_june_2019_2.xlsx")
+```
+
+```{r JRS collection}
+link <- "./actuarial_val_reports/jrs_2019.pdf"
+table <- extract_tables(link,
+               pages = 33,
+               method = "stream")
+exp <- as.data.frame(table[[1]])
+write.xlsx(exp,"./raw_data/jrs_june_2019_1.xlsx")
+
+table <- extract_tables(link,
+               pages = 34,
+               method = "stream")
+exp <- as.data.frame(table[[1]])
+write.xlsx(exp,"./raw_data/jrs_june_2019_2.xlsx")
+```
+
+```{r SERS collection}
+link <- "./actuarial_val_reports/sers_2019.pdf"
+table <- extract_tables(link,
+               pages = 36,
+               method = "stream")
+exp <- as.data.frame(table[[1]])
+write.xlsx(exp,"./raw_data/sers_june_2019_1.xlsx")
+
+table <- extract_tables(link,
+               pages = 37,
+               method = "stream")
+exp <- as.data.frame(table[[1]])
+write.xlsx(exp,"./raw_data/sers_june_2019_2.xlsx")
+```
+
+```{r SURS collection}
+link <- "./actuarial_val_reports/surs_2019.pdf"
+table <- extract_tables(link,
+               pages = 42,
+               method = "stream")
+exp <- as.data.frame(table[[1]])
+write.xlsx(exp,"./raw_data/surs_june_2019.xlsx")
+```
+
+# Variable Codebook
+
+* year
+* number_active
+* aal
+* assets_eoy
+* uual > aal-assets_eoy
+* ratio > assets_eoy/aal
+* payroll
+* tot_nc > empe_nc + empr_nc
+* empe_nc
+* empr_nc
+* empr_nc_as_percent_of_payroll > empr_nc/payroll
+* no_gob_st_cont
+* debt_service
+* maximum_st_cont > no_gob_st_cont - debt_service
+* formula_st_cont_with_gob
+* state_contribution > min(formula_st_cont_with_gob,no_gob_st_cont)
+* cont_as_percent_of_payroll > state_contribution/payroll
+* tot_exp 
+* admin_exp
+* disbursements
+* ror
+
+Note: tot_exp should be the combination of administrative expenses and benefit disbursements to pensioners. For JRS, GARS, and SERS, tot_exp is provided but not admin_exp or disbursements.
+
+```{r, rough working calculation on confirmation of the formula, replication is relatively complete}
+rm(list=ls())
+
+gars <- read.xlsx("./clean_data/gars_2019.xlsx")
+
+gars <- gars %>% mutate(assets_boy=lag(assets_eoy,1)) %>% mutate(assets_boy=ifelse(assets_boy==gars$assets_eoy[1],assets_boy,0))
+
+gars %>% mutate(assets_eoy_calc=assets_boy+state_contribution+empe_nc-tot_exp+assets_boy*ror)
+
+for (i in 2:nrow(gars)) {
+  gars$assets_eoy_calc[i] <- gars$assets_boy[i]+gars$state_contribution[i]+gars$empe_nc[i]-gars$tot_exp[i]+gars$assets_boy[i]*gars$ror[i]
+  gars$assets_boy[i+1] <- gars$assets_eoy_calc[i]
+}
+
+gars$fr_calc <- gars$assets_eoy_calc/gars$aal
+# visualization confirms that calculated assets match actuarial assets within a reasonable margin of error
+gars %>% ggplot() + geom_line(aes(year,assets_eoy)) + geom_line(aes(year,assets_eoy_calc), color="blue")
+```
+
+```{r}
+rm(list=ls())
+
+gars <- read.xlsx("./clean_data/gars_2019.xlsx")
+jrs <- read.xlsx("./clean_data/jrs_2019.xlsx")
+sers <- read.xlsx("./clean_data/sers_2019.xlsx")
+surs <- read.xlsx("./clean_data/surs_2019.xlsx")
+
+ps <- c("gars","jrs","sers","surs")
+
+for (i in ps) {
+  assign(i, get(i) %>% mutate(assets_boy=lag(assets_eoy,1)) %>% mutate(assets_boy=ifelse(assets_boy==assets_eoy[1],assets_boy,0)))
+  assign(i, get(i) %>% mutate(assets_eoy_calc=0))
+}
+
+for (i in ps) {
+  for (k in 2:nrow(get(i))) {
+  assign(paste0(i,"$assets_eoy_calc[",k,"]"), 
+         get(i)$assets_boy[k]+
+           get(i)$state_contribution[k]+
+           get(i)$empe_nc[k]-
+           get(i)$tot_exp[k]+
+           get(i)$assets_boy[k]*get(i)$ror[k])
+    
+  assign(get(i)$assets_boy[k+1], get(i)$assets_eoy_calc[k])
+  }
+}
+
+for (i in ps) {
+  for (k in 2:nrow(get(i))) {
+    print(get(i)[k,20])}}
+
+for (i in ps) {
+  print(get(i)[18])
+}
+
+#calculation is correct
+get(i)$assets_boy[k]+
+    get(i)$state_contribution[k]+
+    get(i)$empe_nc[k]-
+    get(i)$tot_exp[k]+
+    get(i)$assets_boy[k]*get(i)$ror[k]
+
+
+
+assign(gars,9)
+
+gars$assets_eoy_calc[3]
+gars[3,23]
+```
+
+
+
