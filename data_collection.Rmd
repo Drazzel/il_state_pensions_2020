@@ -144,48 +144,54 @@ gars <- read.xlsx("./clean_data/gars_2019.xlsx")
 jrs <- read.xlsx("./clean_data/jrs_2019.xlsx")
 sers <- read.xlsx("./clean_data/sers_2019.xlsx")
 surs <- read.xlsx("./clean_data/surs_2019.xlsx")
+trs <- read.xlsx("./clean_data/trs_2019.xlsx")
 
-ps <- c("gars","jrs","sers","surs")
+ps <- c("gars","jrs","sers","surs","trs")
 
 for (i in ps) {
   assign(i, get(i) %>% mutate(assets_boy=lag(assets_eoy,1)) %>% mutate(assets_boy=ifelse(assets_boy==assets_eoy[1],assets_boy,0)))
   assign(i, get(i) %>% mutate(assets_eoy_calc=0))
 }
 
-for (i in ps) {
-  for (k in 2:nrow(get(i))) {
-  assign(paste0(i,"$assets_eoy_calc[",k,"]"), 
-         get(i)$assets_boy[k]+
-           get(i)$state_contribution[k]+
-           get(i)$empe_nc[k]-
-           get(i)$tot_exp[k]+
-           get(i)$assets_boy[k]*get(i)$ror[k])
-    
-  assign(get(i)$assets_boy[k+1], get(i)$assets_eoy_calc[k])
-  }
-}
-
-for (i in ps) {
-  for (k in 2:nrow(get(i))) {
-    print(get(i)[k,20])}}
-
-for (i in ps) {
-  print(get(i)[18])
-}
-
-#calculation is correct
+#calculation is correct but I cannot figure out how to use the assign function to perform the loop. Unfortunately, manual will have to work here because it does so without the complications
 get(i)$assets_boy[k]+
     get(i)$state_contribution[k]+
     get(i)$empe_nc[k]-
     get(i)$tot_exp[k]+
     get(i)$assets_boy[k]*get(i)$ror[k]
 
+# manually calculating the cells for verification of the replication
+for (i in 2:nrow(gars)) {
+  gars$assets_eoy_calc[i] <- gars$assets_boy[i]+gars$state_contribution[i]+gars$empe_nc[i]-gars$tot_exp[i]+gars$assets_boy[i]*gars$ror[i]
+  gars$assets_boy[i+1] <- gars$assets_eoy_calc[i]
+}
 
+for (i in 2:nrow(jrs)) {
+  jrs$assets_eoy_calc[i] <- jrs$assets_boy[i]+jrs$state_contribution[i]+jrs$empe_nc[i]-jrs$tot_exp[i]+jrs$assets_boy[i]*jrs$ror[i]
+  jrs$assets_boy[i+1] <- jrs$assets_eoy_calc[i]
+}
 
-assign(gars,9)
+for (i in 2:nrow(sers)) {
+  sers$assets_eoy_calc[i] <- sers$assets_boy[i]+sers$state_contribution[i]+sers$empe_nc[i]-sers$tot_exp[i]+sers$assets_boy[i]*sers$ror[i]
+  sers$assets_boy[i+1] <- sers$assets_eoy_calc[i]
+}
 
-gars$assets_eoy_calc[3]
-gars[3,23]
+for (i in 2:nrow(surs)) {
+  surs$assets_eoy_calc[i] <- surs$assets_boy[i]+surs$state_contribution[i]+surs$empe_nc[i]-surs$tot_exp[i]+surs$assets_boy[i]*surs$ror[i]
+  surs$assets_boy[i+1] <- surs$assets_eoy_calc[i]
+}
+
+for (i in 2:nrow(trs)) {
+  trs$assets_eoy_calc[i] <- trs$assets_boy[i]+trs$state_contribution[i]+trs$empe_nc[i]-trs$tot_exp[i]+trs$assets_boy[i]*trs$ror[i]
+  trs$assets_boy[i+1] <- trs$assets_eoy_calc[i]
+}
+
+# visualization confirms that calculated assets match actuarial assets within a reasonable margin of error
+gars %>% filter(year>2020) %>% ggplot() + geom_line(aes(year,assets_eoy)) + geom_line(aes(year,assets_eoy_calc), color="blue")
+jrs %>% filter(year>2020) %>% ggplot() + geom_line(aes(year,assets_eoy)) + geom_line(aes(year,assets_eoy_calc), color="blue")
+sers %>% filter(year>2020) %>% ggplot() + geom_line(aes(year,assets_eoy)) + geom_line(aes(year,assets_eoy_calc), color="blue")
+surs %>% filter(year>2020) %>% ggplot() + geom_line(aes(year,assets_eoy)) + geom_line(aes(year,assets_eoy_calc), color="blue")
+
 ```
 
 
